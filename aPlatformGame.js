@@ -61,7 +61,12 @@ class State {
 
 	get player() {
 		return this.actors.find(a => a.type == "player");
-	}
+  }
+
+  get numberOfCoins() {
+    return this.actors.filter(c => c.type == "coin").length;
+  }
+	
 }
 
 State.prototype.update = function(time, keys) {
@@ -162,6 +167,7 @@ class Coin {
   
   collide = function(state) {
     let filtered = state.actors.filter(a => a != this);
+    console.log(`Number of coins left: ${state.numberOfCoins - 1}`); // the number of coins will reduce one
     let status = state.status;
     if (!filtered.some(a => a.type == "coin")) status = "won";
     return new State(state.level, filtered, status);
@@ -169,21 +175,25 @@ class Coin {
 }
 
 class Monster {
-  constructor(pos, speed) {
+  constructor(pos) {
     this.pos = pos;
-    this.speed = speed;
   }
 
   get type() { return "monster"; }
 
   static create(pos) {
-    return new Monster(pos.plus(new Vec(0, -1)), new Vec(2, 0));
+    return new Monster(pos.plus(new Vec(0, -1)));
   }
 
   size = new Vec(1.2, 2);
 
   collide = function(state) {
-    return new State(state.level, state.actors, "lost");
+    if (state.player.pos.y + 1 < this.pos.y) {
+      let filtered = state.actors.filter(a => a != this);
+      return new State(state.level, filtered, state.status);
+    } else {
+      return new State(state.level, state.actors, "lost");
+    }
   };
 
 }
@@ -285,12 +295,15 @@ Lava.prototype.update = function(time, state) {
   }
 };
 
+const monsterSpeed = 3;
+
 Monster.prototype.update = function(time, state) {
-  let newPos = this.pos.plus(this.speed.times(time));
-  if (!state.level.touches(newPos, this.size, "wall")) {
-    return new Monster(newPos, this.speed);
+  let speed = (state.player.pos.x < this.pos.x ? -1 : 1) * time * monsterSpeed;
+  let newPos = new Vec(this.pos.x + speed, this.pos.y);
+  if (state.level.touches(newPos, this.size, "wall")) {
+    return this;
   } else {
-    return new Monster(this.pos, this.speed.times(-1));
+    return new Monster(newPos);
   }
 };
 
@@ -431,11 +444,14 @@ function runLevel(level, Display) {
 }
 
 async function runGame(plans, Display) {
-  let lives = 3;
+  let lives = 5;
   for (let level = 0; level < plans.length && lives > 0; ) {
     console.log(`Level: ${level+1}, Lives: ${lives}`);
     let status = await runLevel(new Level(plans[level]), Display);
-    if (status == "won") level++;
+    if (status == "won") {
+      level++;
+      lives++;
+    }
     if (status == "lost") lives--;
   }
   if (lives > 0) {
